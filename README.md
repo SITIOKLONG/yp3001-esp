@@ -26,6 +26,15 @@ Characteristics:
 
 Voltage is sent every 2 seconds.
 
+## Power-saving behavior
+
+- BLE advertising window: **2 seconds on, 3 seconds off**
+- Once connected, the board stays connected and pauses the duty cycle
+- After disconnect, the 2s/5s window resumes
+- Servo PWM is detached **1 second after movement**
+  - This stops the servo holding current
+  - The servo may go limp after detaching; use a mechanical hold if needed
+
 ## Build and flash
 
 ```bash
@@ -35,7 +44,22 @@ pio run -t upload --upload-port /dev/cu.usbmodem101
 pio device monitor --port /dev/cu.usbmodem101
 ```
 
-The serial monitor prints the BLE device name and voltage updates.
+The serial monitor prints the BLE device name, advertising window, PWM detach, and voltage updates.
+
+### PlatformIO linker workaround
+
+`platformio.ini` includes a small post-build script:
+
+```text
+scripts/dedupe_libs.py
+```
+
+It removes duplicate library entries from the PlatformIO link command. Without it, the older Xtensa linker can fail with errors such as:
+
+```text
+cannot find -lnewlib
+cannot find -lstdc++
+```
 
 ## Test
 

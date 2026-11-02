@@ -36,19 +36,64 @@ static BLECharacteristic *voltageCharacteristic = nullptr;
 static BLECharacteristic *servoCharacteristic = nullptr;
 static bool deviceConnected = false;
 static bool servoOn = false;
+static bool servoPwmAttached = false;
+static unsigned long servoDetachAt = 0;
+static bool advertisingWindowOpen = false;
+static unsigned long advertisingWindowStartedAt = 0;
+static unsigned long advertisingPausedAt = 0;
 static char deviceName[32];
+
+#define ADVERTISING_WINDOW_MS 2000
+#define ADVERTISING_PAUSE_MS  3000
+#define SERVO_HOLD_MS         1000
+
+static void startAdvertisingWindow()
+{
+    BLEDevice::startAdvertising();
+    advertisingWindowOpen = true;
+    advertisingWindowStartedAt = millis();
+    Serial.println("BLE advertising window open (2s)");
+}
+
+static void pauseAdvertising()
+{
+    BLEDevice::stopAdvertising();
+    advertisingWindowOpen = false;
+    advertisingPausedAt = millis();
+    Serial.println("BLE advertising paused (3s)");
+}
+
+static void servoAttach()
+{
+    if (!servoPwmAttached) {
+        ledcAttachPin(SERVO_PIN, SERVO_LEDC_CHANNEL);
+        servoPwmAttached = true;
+    }
+}
+
+static void servoDetach()
+{
+    if (servoPwmAttached) {
+        ledcWrite(SERVO_LEDC_CHANNEL, 0);
+        ledcDetachPin(SERVO_PIN);
+        servoPwmAttached = false;
+        Serial.println("Servo PWM detached");
+    }
+}
 
 static void setServo(bool on)
 {
+    servoAttach();
     servoOn = on;
     ledcWrite(SERVO_LEDC_CHANNEL, on ? SERVO_DUTY_90 : SERVO_DUTY_0);
-    Serial.printf("Servo %s (%d degrees)\n", on ? "ON" : "OFF", on ? 90 : 0);
+    servoDetachAt = millis() + SERVO_HOLD_MS;
+    Serial.printf("Servo %s (%d degrees), PWM detach in %dms\n",
+                  on ? "ON" : "OFF", on ? 90 : 0, SERVO_HOLD_MS);
 }
 
 static void servoInit()
 {
     ledcSetup(SERVO_LEDC_CHANNEL, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
-    ledcAttachPin(SERVO_PIN, SERVO_LEDC_CHANNEL);
     setServo(false);
 }
 
@@ -56,16 +101,15 @@ class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer *server) override
     {
         deviceConnected = true;
-        Serial.println("BLE client connected");
+        advertisingWindowOpen = false;
+        Serial.println("BLE client connected; advertising paused");
     }
 
     void onDisconnect(BLEServer *server) override
     {
         deviceConnected = false;
         Serial.println("BLE client disconnected");
-        delay(200);
-        BLEDevice::startAdvertising();
-        Serial.println("BLE advertising restarted");
+        startAdvertisingWindow();
     }
 };
 
@@ -143,13 +187,29 @@ void setup()
     scanResponse.setManufacturerData(manufacturerData);
     advertising->setScanResponseData(scanResponse);
 
-    BLEDevice::startAdvertising();
-
-    Serial.println("BLE advertising started");
+    startAdvertisingWindow();
 }
 
 void loop()
 {
+    // Stop the servo pulses after it has had time to reach the target.
+    if (servoDetachAt != 0 && millis() >= servoDetachAt) {
+        servoDetach();
+        servoDetachAt = 0;
+    }
+
+    // Advertise only 2 seconds out of every 5 seconds while disconnected.
+    // Once a phone connects, stay connected and stop the duty cycle.
+    if (!deviceConnected) {
+        if (advertisingWindowOpen) {
+            if (millis() - advertisingWindowStartedAt >= ADVERTISING_WINDOW_MS) {
+                pauseAdvertising();
+            }
+        } else if (millis() - advertisingPausedAt >= ADVERTISING_PAUSE_MS) {
+            startAdvertisingWindow();
+        }
+    }
+
     static unsigned long lastReport = 0;
     if (millis() - lastReport >= 2000) {
         lastReport = millis();
