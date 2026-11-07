@@ -43,8 +43,8 @@ static unsigned long advertisingWindowStartedAt = 0;
 static unsigned long advertisingPausedAt = 0;
 static char deviceName[32];
 
-#define ADVERTISING_WINDOW_MS 2000
-#define ADVERTISING_PAUSE_MS  3000
+#define ADVERTISING_WINDOW_MS 4000
+#define ADVERTISING_PAUSE_MS  10000
 #define SERVO_HOLD_MS         1000
 
 static void startAdvertisingWindow()
@@ -52,7 +52,8 @@ static void startAdvertisingWindow()
     BLEDevice::startAdvertising();
     advertisingWindowOpen = true;
     advertisingWindowStartedAt = millis();
-    Serial.println("BLE advertising window open (2s)");
+    Serial.printf("BLE advertising window open (%lus)\n",
+                  (unsigned long)(ADVERTISING_WINDOW_MS / 1000));
 }
 
 static void pauseAdvertising()
@@ -60,7 +61,8 @@ static void pauseAdvertising()
     BLEDevice::stopAdvertising();
     advertisingWindowOpen = false;
     advertisingPausedAt = millis();
-    Serial.println("BLE advertising paused (3s)");
+    Serial.printf("BLE advertising paused (%lus)\n",
+                  (unsigned long)(ADVERTISING_PAUSE_MS / 1000));
 }
 
 static void servoAttach()
@@ -198,7 +200,7 @@ void loop()
         servoDetachAt = 0;
     }
 
-    // Advertise only 2 seconds out of every 5 seconds while disconnected.
+    // Advertise for 4 seconds out of every 14 seconds while disconnected.
     // Once a phone connects, stay connected and stop the duty cycle.
     if (!deviceConnected) {
         if (advertisingWindowOpen) {

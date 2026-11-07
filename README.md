@@ -28,9 +28,9 @@ Voltage is sent every 2 seconds.
 
 ## Power-saving behavior
 
-- BLE advertising window: **2 seconds on, 3 seconds off**
+- BLE advertising window: **4 seconds on, 10 seconds off**
 - Once connected, the board stays connected and pauses the duty cycle
-- After disconnect, the 2s/5s window resumes
+- After disconnect, the 4s/10s window resumes
 - Servo PWM is detached **1 second after movement**
   - This stops the servo holding current
   - The servo may go limp after detaching; use a mechanical hold if needed
